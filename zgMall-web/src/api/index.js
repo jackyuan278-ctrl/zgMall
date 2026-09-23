@@ -2,7 +2,7 @@ import request from './request'
 import { items, categories } from '@/mock/items'
 
 // ============ 后端网关（zg-gateway 8080）启动后改成 false 即可对接真实接口 ============
-export const USE_MOCK = true
+export const USE_MOCK = false
 
 // ---------------- 用户（已切真实接口，后端网关 8080） ----------------
 export const userApi = {

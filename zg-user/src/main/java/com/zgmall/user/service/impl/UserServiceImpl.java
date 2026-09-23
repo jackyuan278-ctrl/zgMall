@@ -16,7 +16,6 @@ import com.zgmall.user.service.IUserService;
 import com.zgmall.user.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -26,8 +25,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     private final JwtTool jwtTool;
 
-    // 无状态，直接实例化（未引完整 security starter，容器里没有此 Bean）
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    // 容器 Bean：passWordConfig 里 @Bean 注册，@RequiredArgsConstructor 自动注入
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public void register(RegisterFormDTO registerFormDTO) {
@@ -129,6 +128,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     @Override
     public void deductBalance(Long userId, Integer amount) {
         // TODO 核心业务待用户实现：条件更新余额（balance >= amount 才扣，防透支）
-        throw new UnsupportedOperationException("TODO: 扣减余额逻辑待实现");
+        User user = query().eq("id", userId).one();
+        if (user == null) {
+            throw new BizException("用户不存在");
+        }
+        lambdaUpdate().eq(User::getId,userId).setDecrBy(User::getBalance,amount).ge(User::getBalance,amount).update();
     }
 }

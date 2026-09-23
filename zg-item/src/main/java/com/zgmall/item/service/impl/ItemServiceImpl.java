@@ -1,43 +1,149 @@
 package com.zgmall.item.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zgmall.api.dto.OrderDetailDTO;
+import com.zgmall.common.BizException;
 import com.zgmall.common.domain.PageDTO;
+import com.zgmall.common.domain.PageQuery;
+import com.zgmall.item.domain.po.Brand;
+import com.zgmall.item.domain.po.Category;
 import com.zgmall.item.domain.po.Item;
 import com.zgmall.item.domain.query.ItemPageQuery;
 import com.zgmall.item.domain.vo.ItemVO;
+import com.zgmall.item.enums.ItemStatus;
+import com.zgmall.item.mapper.BrandMapper;
+import com.zgmall.item.mapper.CategoryMapper;
 import com.zgmall.item.mapper.ItemMapper;
 import com.zgmall.item.service.IItemService;
-import org.springframework.stereotype.Service;
 
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
 
 @Service
+@RequiredArgsConstructor
 public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements IItemService {
-
+    private final BrandMapper brandMapper;
+    private final CategoryMapper categoryMapper;
     @Override
     public PageDTO<ItemVO> queryItemPage(ItemPageQuery query) {
-        // TODO 核心业务待用户实现：只查上架商品 -> keyword 匹配（一期 LIKE，ES 加分项）-> categoryId 过滤
-        //      -> sort 排序（sales/priceAsc/priceDesc）-> join 分类/品牌映射 categoryName/brand/desc
-        throw new UnsupportedOperationException("TODO: 商品分页查询待实现");
+        LambdaQueryWrapper<Item> lq = new QueryWrapper<Item>().lambda();
+        lq.eq(Item::getStatus, ItemStatus.ON_SHELF.getValue());
+        if (StrUtil.isNotBlank(query.getKeyword())) {
+            lq.like(Item::getName, query.getKeyword());
+        }
+        if (query.getCategoryId() != null) {
+            lq.eq(Item::getCategoryId, query.getCategoryId());
+        }
+
+        if (query.getSort() != null) {
+            switch (query.getSort()) {
+                case "sales" : lq.orderByDesc(Item::getSales); break;
+                case "priceAsc" : lq.orderByAsc(Item::getPrice); break;
+                case "priceDesc" : lq.orderByDesc(Item::getPrice); break;
+                default:  break;
+            }
+        }
+        Page<Item> result = this.page(query.toMpPage(), lq);
+
+        List<Long> categoryIds = result.getRecords().stream()
+                .map(Item::getCategoryId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<Long> brandIds = result.getRecords().stream()
+                .map(Item::getBrandId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, Category> categoryMap = categoryIds.isEmpty() ? Collections.emptyMap()
+                : categoryMapper.selectBatchIds(categoryIds).stream()
+                        .collect(Collectors.toMap(Category::getId, c -> c));
+        Map<Long, Brand> brandMap = brandIds.isEmpty() ? Collections.emptyMap()
+                : brandMapper.selectBatchIds(brandIds).stream()
+                        .collect(Collectors.toMap(Brand::getId, b -> b));
+
+        List<ItemVO> itemVoList = new ArrayList<>();
+        for (Item item : result.getRecords()) {
+            ItemVO itemVO = BeanUtil.copyProperties(item, ItemVO.class);
+            Category category = categoryMap.get(item.getCategoryId());
+            Brand brand = brandMap.get(item.getBrandId());
+            if (category != null) {
+                itemVO.setCategoryName(category.getName());
+            }
+            if (brand != null) {
+                itemVO.setBrand(brand.getName());
+            }
+            itemVoList.add(itemVO);
+        }
+        PageDTO<ItemVO> pageDTO = new PageDTO<>();
+        pageDTO.setTotal(result.getTotal());
+        pageDTO.setList(itemVoList);
+
+        return pageDTO;
     }
 
     @Override
     public ItemVO queryItemById(Long id) {
-        // TODO 核心业务待用户实现：join 分类/品牌映射 VO；不存在抛 BizException(404)
-        throw new UnsupportedOperationException("TODO: 商品详情待实现");
+        Item item = getById(id);
+        if (item == null) {
+            throw new BizException(400,"商品不存在");
+        }
+        ItemVO itemVO = BeanUtil.copyProperties(item, ItemVO.class);
+        Long categoryId = item.getCategoryId();
+        Long brandId = item.getBrandId();
+        Brand brand = brandMapper.selectById(brandId);
+        Category category = categoryMapper.selectById(categoryId);
+        if (category != null) {
+            itemVO.setCategoryName(category.getName());
+        }
+        if (brand != null) {
+            itemVO.setBrand(brand.getName());
+        }
+        return itemVO;
     }
 
     @Override
+    @Transactional(rollbackFor = BizException.class)
     public void deductStock(List<OrderDetailDTO> details) {
-        // TODO 核心业务待用户实现：逐条条件更新 UPDATE stock = stock - num WHERE id = ? AND stock >= num
-        //      影响行数 0 即库存不足，抛 BizException；注意先全部校验或事务内回滚已扣部分
-        throw new UnsupportedOperationException("TODO: 库存预扣待实现");
+        details.sort(Comparator.comparing(OrderDetailDTO::getItemId));
+        for (OrderDetailDTO detail : details) {
+            Integer num = detail.getNum();
+            Long itemId = detail.getItemId();
+            boolean update = lambdaUpdate().eq(Item::getId, itemId).ge(Item::getStock, num).setDecrBy(Item::getStock, num).update();
+            if (!update) {
+                Item item = getById(itemId);
+                if (item != null) {
+                    throw new BizException(400,"商品库存不足");
+                }else{
+                    throw new BizException(400,"商品不存在");
+                }
+
+            }
+        }
     }
 
     @Override
+    @Transactional(rollbackFor = BizException.class)
     public void restoreStock(List<OrderDetailDTO> details) {
-        // TODO 核心业务待用户实现：逐条加回库存 UPDATE stock = stock + num WHERE id = ?
-        throw new UnsupportedOperationException("TODO: 库存回滚待实现");
+        for (OrderDetailDTO detail : details) {
+            Integer num = detail.getNum();
+            Long itemId = detail.getItemId();
+            Item item = getById(itemId);
+            if (item == null) {
+                throw new BizException(400,"商品不存在" );
+            }
+            lambdaUpdate().eq(Item::getId, itemId).setIncrBy(Item::getStock,num).update();
+
+        }
     }
 }

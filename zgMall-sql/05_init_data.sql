@@ -53,6 +53,26 @@ INSERT INTO tb_item (id, name, price, stock, image, category_id, brand_id, spec,
 (1015, '小米手环9 NFC版 运动健康智能手环 表盘商城', 24900, 660, '/images/p1015.webp', 1, 1, '1.62英寸AMOLED / NFC / 16天续航', 9217, 1, '轻薄金属机身，心率血氧监测，NFC门禁公交，16天长续航。'),
 (1016, '京东京造 记忆棉枕头 颈椎护颈助眠枕 慢回弹低枕', 12900, 430, '/images/p1016.jpg', 5, 14, '慢回弹记忆棉 / B型曲线 / 可洗枕套', 3210, 1, '太空记忆棉慢回弹，人体工学曲线承托颈椎，抗菌可拆洗枕套。');
 
+-- 在基础 16 款上生成变体（每种 10 个后缀，共 160 条），让分页/排序/筛选有数据量
+INSERT INTO tb_item (id, name, price, stock, image, category_id, brand_id, spec, sales, status, description)
+SELECT
+    i.id + t.n * 10000,
+    CONCAT(i.name, ' ', ELT(t.n, '青春版', '尊享版', '特惠装', '升级款', '礼盒装', '限量款', '2026新款', 'mini版', 'plus版', 'pro版')),
+    ROUND(i.price * (0.68 + t.n * 0.07)),
+    FLOOR(30 + RAND() * 900),
+    i.image,
+    i.category_id,
+    i.brand_id,
+    i.spec,
+    FLOOR(i.sales * (0.1 + RAND() * 0.9)),
+    1,
+    i.description
+FROM tb_item i
+CROSS JOIN (
+    SELECT 1 n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5
+    UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9 UNION ALL SELECT 10
+) t;
+
 -- ==================== 订单服务 zg_trade ====================
 USE zg_trade;
 
