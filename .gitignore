@@ -1,0 +1,13 @@
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+logs/
+*.log
+application-local.yml
+application-dev.yml
+node_modules/
+dist/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+package com.zgmall.api.client;
+
+import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
+/**
+ * 用户服务客户端（支付服务扣余额用，Feign 直连不经网关）
+ */
+@FeignClient(value = "user-service", path = "/users")
+public interface UserClient {
+
+    @PutMapping("/{id}/balance/deduct")
+    void deductBalance(@PathVariable("id") Long userId, @RequestParam("amount") Integer amount);
+}

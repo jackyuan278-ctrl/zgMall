@@ -1,0 +1,60 @@
+server:
+  port: 8080
+spring:
+  main:
+    web-application-type: reactive
+  application:
+    name: gateway-service
+  # 网关无数据库，排除 zg-common 传递引入的 JDBC 自动配置
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+        - id: item-service
+          uri: lb://item-service
+          predicates:
+            - Path=/api/items/**
+          filters:
+            - StripPrefix=1
+        - id: cart-service
+          uri: lb://cart-service
+          predicates:
+            - Path=/api/cart/**
+          filters:
+            - StripPrefix=1
+        - id: trade-service
+          uri: lb://trade-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - StripPrefix=1
+        - id: pay-service
+          uri: lb://pay-service
+          predicates:
+            - Path=/api/pay/**
+          filters:
+            - StripPrefix=1
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=1
+zg:
+  jwt:
+    secret: ${JWT_SECRET:zgmall-jwt-secret-placeholder-32bytes-min}
+    ttl: 1800000
+logging:
+  level:
+    com.zgmall: debug

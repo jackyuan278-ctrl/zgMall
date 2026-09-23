@@ -1,0 +1,48 @@
+:root {
+  /* 智购清新主题 */
+  --zg-primary: #14b8a6;
+  --zg-primary-dark: #0d9488;
+  --zg-accent: #38bdf8;
+  --zg-price: #ff6b4a;
+  --zg-bg: #eef6f6;
+  --zg-text: #334155;
+  --zg-text-light: #94a3b8;
+  --zg-border: #eef2f6;
+  --zg-card-shadow: 0 2px 12px rgba(15, 82, 100, 0.06);
+
+  /* 覆盖 Element Plus 主色 */
+  --el-color-primary: #14b8a6;
+  --el-color-primary-light-3: #4fc8bb;
+  --el-color-primary-light-5: #82d8ce;
+  --el-color-primary-light-7: #b8e8e2;
+  --el-color-primary-light-8: #d0f0eb;
+  --el-color-primary-light-9: #e8f8f5;
+  --el-color-primary-dark-2: #10a394;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
+  color: var(--zg-text);
+  background: var(--zg-bg);
+}
+
+a {
+  color: inherit;
+}
+
+.zg-page-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 8px 0 16px;
+}
+
+.zg-empty {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--zg-text-light);
+}
