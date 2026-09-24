@@ -145,53 +145,17 @@ export const addressApi = {
 }
 
 // ---------------- 订单 ----------------
-const ORDER_KEY = 'zg_mock_orders'
-
-function loadOrders() {
-  return JSON.parse(localStorage.getItem(ORDER_KEY) || '[]')
-}
-
-function saveOrders(orders) {
-  localStorage.setItem(ORDER_KEY, JSON.stringify(orders))
-}
-
 export const orderApi = {
   create({ receiver, phone, address, remark, goods }) {
-    if (USE_MOCK) {
-      const order = {
-        id: Date.now(),
-        userId: 1,
-        totalFee: goods.reduce((sum, g) => sum + g.price * g.num, 0),
-        status: 1,
-        receiver, phone, address, remark,
-        goods,
-        createTime: new Date().toLocaleString('zh-CN', { hour12: false })
-      }
-      const orders = loadOrders()
-      orders.unshift(order)
-      saveOrders(orders)
-      return Promise.resolve(order)
-    }
     return request.post('/orders', { receiver, phone, address, remark, goods })
   },
   list() {
-    if (USE_MOCK) return Promise.resolve(loadOrders())
     return request.get('/orders')
   },
   detail(orderId) {
-    if (USE_MOCK) return Promise.resolve(loadOrders().find((o) => o.id === Number(orderId)) || null)
     return request.get(`/orders/${orderId}`)
   },
   pay(orderId, payType = 'mock') {
-    if (USE_MOCK) {
-      const orders = loadOrders()
-      const order = orders.find((o) => o.id === Number(orderId))
-      if (order) {
-        order.status = 2
-        saveOrders(orders)
-      }
-      return Promise.resolve(true)
-    }
     return request.post(`/pay/orders/${orderId}/pay`, { payType })
   }
 }

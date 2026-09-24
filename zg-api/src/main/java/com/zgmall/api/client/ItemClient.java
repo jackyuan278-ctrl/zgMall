@@ -18,8 +18,8 @@ public interface ItemClient {
     Result<ItemDTO> queryItemById(@PathVariable("id") Long id);
 
     @PutMapping("/stock/deduct")
-    void deductStock(@RequestBody List<OrderDetailDTO> details);
+    Result<Void> deductStock(@RequestBody List<OrderDetailDTO> details);
 
     @PutMapping("/stock/restore")
-    void restoreStock(@RequestBody List<OrderDetailDTO> details);
+    Result<Void> restoreStock(@RequestBody List<OrderDetailDTO> details);
 }
