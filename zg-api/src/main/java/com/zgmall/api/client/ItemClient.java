@@ -2,6 +2,7 @@ package com.zgmall.api.client;
 
 import com.zgmall.api.dto.ItemDTO;
 import com.zgmall.api.dto.OrderDetailDTO;
+import com.zgmall.common.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,7 +15,7 @@ import java.util.List;
 public interface ItemClient {
 
     @GetMapping("/{id}")
-    ItemDTO queryItemById(@PathVariable("id") Long id);
+    Result<ItemDTO> queryItemById(@PathVariable("id") Long id);
 
     @PutMapping("/stock/deduct")
     void deductStock(@RequestBody List<OrderDetailDTO> details);
