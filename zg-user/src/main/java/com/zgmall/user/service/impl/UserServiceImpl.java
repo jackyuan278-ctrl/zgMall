@@ -127,11 +127,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     @Override
     public void deductBalance(Long userId, Integer amount) {
-        // TODO 核心业务待用户实现：条件更新余额（balance >= amount 才扣，防透支）
         User user = query().eq("id", userId).one();
         if (user == null) {
             throw new BizException("用户不存在");
         }
-        lambdaUpdate().eq(User::getId,userId).setDecrBy(User::getBalance,amount).ge(User::getBalance,amount).update();
+        boolean deducted = lambdaUpdate()
+                .eq(User::getId, userId)
+                .ge(User::getBalance, amount)
+                .setDecrBy(User::getBalance, amount)
+                .update();
+        if (!deducted) {
+            throw new BizException("余额不足");
+        }
     }
 }

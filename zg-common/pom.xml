@@ -43,5 +43,11 @@
             <artifactId>jjwt-jackson</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!--optional：FeignRelayConfig 编译用；gateway 无 feign 不受影响，各业务服务自身已声明 openfeign-->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 </project>
