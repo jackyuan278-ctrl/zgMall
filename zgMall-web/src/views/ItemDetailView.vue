@@ -5,7 +5,7 @@
     </div>
     <div class="detail__info">
       <h1 class="detail__name">{{ item.name }}</h1>
-      <div class="detail__desc">{{ item.desc }}</div>
+      <div class="detail__desc">{{ item.description }}</div>
       <div class="detail__price-box">
         <span class="detail__label">智购价</span>
         <span class="detail__price">¥{{ formatPrice(item.price) }}</span>

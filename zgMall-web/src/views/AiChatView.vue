@@ -6,6 +6,7 @@
         <h2>智购 AI 导购</h2>
         <p>说出你的预算和需求，我来帮你挑</p>
       </div>
+      <el-button class="chat__new" text :disabled="streaming" @click="resetChat">新会话</el-button>
     </div>
 
     <div ref="listRef" class="chat__list">
@@ -61,7 +62,7 @@
 </template>
 
 <script setup>
-import { nextTick, onBeforeUnmount, ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { chatStream } from '@/api/ai'
 import { formatPrice } from '@/api'
 
@@ -73,9 +74,18 @@ const quickQuestions = [
   '送女友的礼物'
 ]
 
-const sessionId = ref('s-' + Date.now())
+const sessionId = ref(sessionStorage.getItem('zg_ai_sid') || 's-' + Date.now())
+sessionStorage.setItem('zg_ai_sid', sessionId.value)
 const draft = ref('')
-const messages = ref([])
+function loadMessages() {
+  try {
+    return JSON.parse(sessionStorage.getItem('zg_ai_msgs') || '[]')
+  } catch {
+    return []
+  }
+}
+const messages = ref(loadMessages())
+watch(messages, (v) => sessionStorage.setItem('zg_ai_msgs', JSON.stringify(v)), { deep: true })
 const streaming = ref(false)
 const listRef = ref(null)
 let cancelFn = null
@@ -86,6 +96,13 @@ function scrollBottom() {
   })
 }
 
+function resetChat() {
+  if (streaming.value) return
+  messages.value = []
+  sessionId.value = 's-' + Date.now()
+  sessionStorage.setItem('zg_ai_sid', sessionId.value)
+}
+
 function send(text) {
   const content = (text ?? draft.value).trim()
   if (!content || streaming.value) return
@@ -93,24 +110,26 @@ function send(text) {
   messages.value.push({ role: 'user', content })
   const aiMsg = { role: 'ai', content: '', items: [], streaming: true }
   messages.value.push(aiMsg)
+  // 必须取回数组里的 proxy 版本：直接改 push 前的裸对象不触发响应，流式字不会上屏
+  const live = messages.value[messages.value.length - 1]
   streaming.value = true
   scrollBottom()
   cancelFn = chatStream(content, sessionId.value, {
     onToken(token) {
-      aiMsg.content += token
+      live.content += token
       scrollBottom()
     },
     onItems(items) {
-      aiMsg.items = items
+      live.items = items
       scrollBottom()
     },
     onDone() {
-      aiMsg.streaming = false
+      live.streaming = false
       streaming.value = false
     },
     onError() {
-      aiMsg.content = aiMsg.content || '（连接中断，请稍后重试）'
-      aiMsg.streaming = false
+      live.content = live.content || '（连接中断，请稍后重试）'
+      live.streaming = false
       streaming.value = false
     }
   })
@@ -150,6 +169,11 @@ onBeforeUnmount(() => {
 .chat__head p {
   margin: 2px 0 0;
   font-size: 12px;
+  opacity: 0.9;
+}
+.chat__new {
+  margin-left: auto;
+  color: #fff;
   opacity: 0.9;
 }
 .chat__list {

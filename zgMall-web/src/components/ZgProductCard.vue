@@ -8,7 +8,7 @@
       <div class="zg-card__spec">{{ item.spec }}</div>
       <div class="zg-card__foot">
         <span class="zg-card__price">¥{{ formatPrice(item.price) }}</span>
-        <span class="zg-card__sales">已售{{ item.sales }}</span>
+        <span class="zg-card__sales">已售{{ formatSales(item.sales) }}</span>
       </div>
     </div>
   </div>
@@ -20,6 +20,10 @@ import { formatPrice } from '@/api'
 defineProps({
   item: { type: Object, required: true }
 })
+
+function formatSales(n) {
+  return n >= 10000 ? (n / 10000).toFixed(1).replace(/\.0$/, '') + '万' : n
+}
 </script>
 
 <style scoped>

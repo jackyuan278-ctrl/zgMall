@@ -1,7 +1,6 @@
 package com.zgmall.ai.config;
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor; // M8重点！vectorstore子包
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -42,7 +41,6 @@ public class AiConfig {
 
     @Bean
     public ChatClient shopClient(ChatModel model,
-                                 ChatMemory chatMemory,
                                  VectorStore vectorStore,
                                  @Value("classpath:prompts/system.st") Resource systemPrompt) {
         String systemText;
@@ -55,7 +53,8 @@ public class AiConfig {
                 .defaultSystem(systemText)
                 .defaultAdvisors(
                         new SimpleLoggerAdvisor(),
-                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        // 记忆不走 advisor：1.0.0 GA 的 MessageChatMemoryAdvisor 在 stream 路径不保存对话，
+                        // 改由 AiServiceImpl 手动 get/add ChatMemory（窗口截断仍由 MessageWindowChatMemory 负责）
                         QuestionAnswerAdvisor.builder(vectorStore)
                                 .searchRequest(SearchRequest.builder()
                                         .topK(4)
@@ -63,7 +62,6 @@ public class AiConfig {
                                         .build())
                                 .build()
                 )
-                // M8里程碑版本！不要加 .defaultTools(courseTools)，会出现RAG循环多次检索bug
                 .build();
     }
 }

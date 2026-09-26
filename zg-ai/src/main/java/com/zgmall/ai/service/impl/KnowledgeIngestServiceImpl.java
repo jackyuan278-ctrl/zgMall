@@ -29,8 +29,8 @@ public class KnowledgeIngestServiceImpl implements IKnowledgeIngestService {
 
     @Override
     public void ingestItems() {
-        // ========== 幂等：可选，先清空商品旧向量数据（M8 Milvus filter删除）
-        // vectorStore.delete("itemId IS NOT NULL");
+        // ========== 幂等：先清空商品旧向量，否则已下架/已删除商品的向量会残留并被检索到
+        vectorStore.delete("itemId IS NOT NULL");
 
         int page = 1;
         int total = 0;
@@ -52,13 +52,14 @@ public class KnowledgeIngestServiceImpl implements IKnowledgeIngestService {
             }
 
             for (ItemDTO itemDTO : list) {
-                // 1. 构建知识库文本：图片/ID 走 metadata，正文只放有语义的信息（规格能提升口语查询命中）
+                // 1. 构建知识库文本：图片/ID 走 metadata，正文只放有语义的信息（规格/描述能提升口语查询命中）
                 String content = String.format(
-                        "商品名称：%s，价格：%.2f元，库存：%d，规格：%s",
+                        "商品名称：%s，价格：%.2f元，库存：%d，规格：%s，描述：%s",
                         itemDTO.getName(),
                         itemDTO.getPrice() / 100.0, // 分转元
                         itemDTO.getStock(),
-                        itemDTO.getSpec()
+                        itemDTO.getSpec(),
+                        itemDTO.getDescription() == null ? "" : itemDTO.getDescription()
                 );
 
                 // 2. 构建元数据，检索结果可以带回这些字段

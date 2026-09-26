@@ -21,6 +21,11 @@ spring:
     zhipuai:
       # 智谱 API Key，用环境变量注入：ZHIPUAI_API_KEY，不要把 key 提交到代码里
       api-key: ${ZHIPUAI_API_KEY:}
+      embedding:
+        options:
+          # 显式指定 embedding-3（2048 维）。不指定会落到默认 embedding-2（1024 维），
+          # 与下方 embedding-dimension=2048 的集合维度不匹配，向量写入全部失败
+          model: embedding-3
     vectorstore:
       milvus:
         client:

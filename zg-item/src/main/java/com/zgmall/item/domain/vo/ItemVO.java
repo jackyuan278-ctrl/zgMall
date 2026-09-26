@@ -3,7 +3,7 @@ package com.zgmall.item.domain.vo;
 import lombok.Data;
 
 /**
- * 商品 VO，字段名迁就前端契约（categoryName/brand/desc）
+ * 商品 VO，字段名迁就前端契约（categoryName/brand/description）
  */
 @Data
 public class ItemVO {
@@ -32,5 +32,5 @@ public class ItemVO {
     /** 1上架 0下架 */
     private Integer status;
 
-    private String desc;
+    private String description;
 }

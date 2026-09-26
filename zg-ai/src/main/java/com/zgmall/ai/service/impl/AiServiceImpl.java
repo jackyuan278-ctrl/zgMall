@@ -9,6 +9,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -16,16 +19,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * AI 导购流式问答。RAG 检索 + 会话记忆已由 AiConfig 的 advisor 链（QuestionAnswerAdvisor +
- * MessageChatMemoryAdvisor）自动完成，这里只负责：
+ * AI 导购流式问答。RAG 检索由 AiConfig 的 QuestionAnswerAdvisor 自动完成；会话记忆由本类手动
+ * 读写 ChatMemory（1.0.0 GA 的 MessageChatMemoryAdvisor 在 stream 路径不保存对话）。职责：
  * 1) 单独 similaritySearch 拿候选商品 -> Feign 实时查 -> event: items（价格库存以真实数据为准，不让 LLM 编）
- * 2) ChatClient.stream() 流式吐文本片段 -> data
+ * 2) 历史窗口 + 本轮问题 -> ChatClient.stream() 流式吐文本片段 -> data
  * 3) 结尾 data: [DONE]
  */
 @Slf4j
@@ -37,6 +41,7 @@ public class AiServiceImpl implements IAiService {
     private final VectorStore vectorStore;
     private final ItemClient itemClient;
     private final ObjectMapper objectMapper;
+    private final ChatMemory chatMemory;
 
     private static final long SSE_TIMEOUT = 60_000L;
     private static final int ITEM_TOP_K = 4;
@@ -47,24 +52,31 @@ public class AiServiceImpl implements IAiService {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
 
         // 1. 先推「推荐商品卡片」：向量检索   候选 itemId -> Feign 实时查真实价格库存
+        List<Map<String, Object>> items;
         try {
-            List<Map<String, Object>> items = searchRecommendItems(message);
+            items = searchRecommendItems(message);
             if (!items.isEmpty()) {
                 emitter.send(SseEmitter.event().name("items").data(objectMapper.writeValueAsString(items)));
             }
         } catch (Exception e) {
+            items = List.of();
             // 商品卡片推送失败不影响后续文字回答
             log.warn("推送 items 事件失败: {}", e.getMessage());
         }
 
-        // 2. 流式生成回答。advisor 链自动做记忆 + RAG，必须传 CONVERSATION_ID 按会话隔离
+        // 2. 流式生成回答。记忆手动管理（1.0.0 GA 的 memory advisor 在 stream 路径不保存）：
+        //    先取历史窗口塞进 prompt，流结束后把本轮问答写回
+        String userPrompt = buildUserPrompt(message, items);
+        List<Message> history = chatMemory.get(sessionId);
+        StringBuilder fullReply = new StringBuilder();
         shopClient.prompt()
-                .user(message)
-                .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, sessionId))
+                .messages(history)
+                .user(userPrompt)
                 .stream()
                 .content()
                 .subscribe(
                         chunk -> {
+                            fullReply.append(chunk);
                             try {
                                 emitter.send(SseEmitter.event().data(chunk));
                             } catch (IOException e) {
@@ -76,6 +88,9 @@ public class AiServiceImpl implements IAiService {
                             emitter.completeWithError(error);
                         },
                         () -> {
+                            chatMemory.add(sessionId, List.of(
+                                    new UserMessage(userPrompt),
+                                    new AssistantMessage(fullReply.toString())));
                             try {
                                 emitter.send(SseEmitter.event().data("[DONE]"));
                             } catch (IOException ignored) {
@@ -86,6 +101,26 @@ public class AiServiceImpl implements IAiService {
                 );
 
         return emitter;
+    }
+
+    /**
+     * 把本次检索出的真实商品拼进用户消息，让文本推荐与前端商品卡片一一对应，
+     * 避免 LLM 依据 RAG 上下文编出卡片里没有的商品。
+     */
+    private String buildUserPrompt(String message, List<Map<String, Object>> items) {
+        if (items == null || items.isEmpty()) {
+            return message;
+        }
+        StringBuilder sb = new StringBuilder(message);
+        sb.append("\n\n【本回复可推荐的真实商品】\n");
+        for (Map<String, Object> it : items) {
+            Object price = it.get("price");
+            double yuan = price == null ? 0 : Double.parseDouble(String.valueOf(price)) / 100.0;
+            sb.append("- ").append(it.get("name"))
+              .append("（价格 ").append(yuan).append(" 元，库存 ").append(it.get("stock")).append("）\n");
+        }
+        sb.append("\n要求：优先推荐上述商品，提到时用完整名称；商品卡片已展示给用户，回答里不必重复罗列参数。");
+        return sb.toString();
     }
 
     /**
@@ -108,7 +143,8 @@ public class AiServiceImpl implements IAiService {
             if (itemIdObj == null) {
                 continue;
             }
-            Long itemId = Long.valueOf(String.valueOf(itemIdObj));
+            // Milvus 回读 metadata 数值为浮点（1002 -> "1002.0"），Long.valueOf 会炸，用 BigDecimal 兜住
+            Long itemId = new BigDecimal(String.valueOf(itemIdObj)).longValueExact();
             Map<String, Object> card = new LinkedHashMap<>();
             Result<ItemDTO> result = itemClient.queryItemById(itemId);
             if (result != null && result.getCode() == 200 && result.getData() != null) {

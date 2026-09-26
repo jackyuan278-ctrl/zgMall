@@ -21,7 +21,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('zg_token')
-  const needLogin = ['/cart', '/order/confirm', '/orders', '/address', '/profile', '/password'].includes(to.path)
+  const needLogin = ['/cart', '/order/confirm', '/orders', '/address', '/profile', '/password', '/ai'].includes(to.path)
   if (needLogin && !token) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }

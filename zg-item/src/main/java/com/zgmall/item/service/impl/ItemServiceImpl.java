@@ -51,13 +51,16 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
             lq.eq(Item::getCategoryId, query.getCategoryId());
         }
 
-        if (query.getSort() != null) {
+        if (StrUtil.isNotBlank(query.getSort())) {
             switch (query.getSort()) {
                 case "sales" : lq.orderByDesc(Item::getSales); break;
                 case "priceAsc" : lq.orderByAsc(Item::getPrice); break;
                 case "priceDesc" : lq.orderByDesc(Item::getPrice); break;
                 default:  break;
             }
+        } else {
+            // 无排序时按主键稳定翻页：MySQL 无 ORDER BY 的 LIMIT 顺序不保证，AI 入库逐页拉取会漏商品
+            lq.orderByAsc(Item::getId);
         }
         Page<Item> result = this.page(query.toMpPage(), lq);
 
