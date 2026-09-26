@@ -37,6 +37,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         if (headers != null && !headers.isEmpty()) {
             token = headers.get(0);
         }
+        // EventSource 带不了自定义头：SSE 请求（/api/ai/chat/stream）token 走 query 参数兜底
+        if (token == null || token.isEmpty()) {
+            token = request.getQueryParams().getFirst("authorization");
+        }
         Long userId;
         try {
             userId = jwtTool.parseToken(token);

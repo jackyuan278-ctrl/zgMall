@@ -41,6 +41,11 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-vector-store-milvus</artifactId>
         </dependency>
+        <!--1.0.0 GA 起 QuestionAnswerAdvisor 独立成该构件，两个 starter 都不会传递带入-->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-advisors-vector-store</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.zgmall</groupId>
             <artifactId>zg-common</artifactId>
