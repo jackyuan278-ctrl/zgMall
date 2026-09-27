@@ -1,14 +1,19 @@
 import { defineStore } from 'pinia'
 import { userApi } from '@/api'
+import { clearAuth, isTokenFresh } from '@/utils/auth'
 
 export const useUserStore = defineStore('user', {
-  state: () => ({
-    token: localStorage.getItem('zg_token') || '',
-    username: localStorage.getItem('zg_username') || '',
-    userInfo: null
-  }),
+  state: () => {
+    // 启动时 token 若已过期就当未登录，否则头部显示"已登录"而所有接口都 401
+    const fresh = isTokenFresh()
+    return {
+      token: fresh ? localStorage.getItem('zg_token') : '',
+      username: fresh ? (localStorage.getItem('zg_username') || '') : '',
+      userInfo: null
+    }
+  },
   getters: {
-    logged: (state) => !!state.token
+    logged: (state) => isTokenFresh(state.token)
   },
   actions: {
     async login(form) {
@@ -22,8 +27,7 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.username = ''
       this.userInfo = null
-      localStorage.removeItem('zg_token')
-      localStorage.removeItem('zg_username')
+      clearAuth()
     },
     async fetchMe() {
       this.userInfo = await userApi.me()

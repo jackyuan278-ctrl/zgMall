@@ -131,6 +131,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (user == null) {
             throw new BizException("用户不存在");
         }
+        if(amount == null || amount <= 0){
+            throw new BizException("传入价格有误");
+        }
         boolean deducted = lambdaUpdate()
                 .eq(User::getId, userId)
                 .ge(User::getBalance, amount)

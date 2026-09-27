@@ -25,7 +25,7 @@
         <div v-if="m.role === 'ai'" class="msg__avatar">智</div>
         <div class="msg__content">
           <div class="msg__bubble" :class="{ 'msg__bubble--streaming': m.streaming }">
-            <span class="msg__text">{{ m.content }}</span><span v-if="m.streaming" class="msg__cursor">|</span>
+            <span class="msg__text">{{ fmtText(m.content) }}</span><span v-if="m.streaming" class="msg__cursor">|</span>
           </div>
           <div v-if="m.items && m.items.length" class="msg__items">
             <div v-for="it in m.items" :key="it.id" class="mini-card" @click="$router.push(`/items/${it.id}`)">
@@ -89,6 +89,12 @@ watch(messages, (v) => sessionStorage.setItem('zg_ai_msgs', JSON.stringify(v)), 
 const streaming = ref(false)
 const listRef = ref(null)
 let cancelFn = null
+
+// 气泡是 white-space: pre-wrap，换行会原样渲染：模型偶发的首尾换行、
+// 以及 sessionStorage 历史消息里残留的 Markdown 空行都会显示成空行，渲染时统一收掉
+function fmtText(s) {
+  return (s || '').replace(/\n{2,}/g, '\n').trim()
+}
 
 function scrollBottom() {
   nextTick(() => {
