@@ -30,7 +30,9 @@ public class KnowledgeIngestServiceImpl implements IKnowledgeIngestService {
     @Override
     public void ingestItems() {
         // ========== 幂等：先清空商品旧向量，否则已下架/已删除商品的向量会残留并被检索到
-        vectorStore.delete("itemId IS NOT NULL");
+        // 不能写 "itemId IS NOT NULL"：Spring AI 的 FilterExpressionTextParser 没有 IS NULL 语法，
+        // 会抛 FilterExpressionParseException。itemId != 0 会被转成 Milvus 的 metadata["itemId"] != 0
+        vectorStore.delete("itemId != 0");
 
         int page = 1;
         int total = 0;

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { clearAuth, isTokenFresh } from '@/utils/auth'
 
 const routes = [
   { path: '/', name: 'home', component: () => import('@/views/HomeView.vue') },
@@ -20,9 +21,10 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const token = localStorage.getItem('zg_token')
   const needLogin = ['/cart', '/order/confirm', '/orders', '/address', '/profile', '/password', '/ai'].includes(to.path)
-  if (needLogin && !token) {
+  if (needLogin && !isTokenFresh()) {
+    // 过期 token 必须清掉，否则它会一直留在 localStorage 里反复骗过守卫
+    clearAuth()
     return { name: 'login', query: { redirect: to.fullPath } }
   }
 })

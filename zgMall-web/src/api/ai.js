@@ -1,4 +1,5 @@
 import { USE_MOCK, itemApi } from './index'
+import { getToken, isTokenFresh, toLogin } from '@/utils/auth'
 
 // 智购 AI 导购：SSE 流式对话
 // 后端接口约定：GET /api/ai/chat/stream?message=xxx&sessionId=xxx
@@ -7,7 +8,12 @@ export function chatStream(message, sessionId, { onToken, onItems, onDone, onErr
   if (USE_MOCK) {
     return mockStream(message, { onToken, onItems, onDone })
   }
-  const token = localStorage.getItem('zg_token')
+  // EventSource 不经过 axios 拦截器，401 时不会自动清登录态跳登录，只能自己先判一次
+  if (!isTokenFresh()) {
+    toLogin('/ai')
+    return () => {}
+  }
+  const token = getToken()
   const es = new EventSource(`/api/ai/chat/stream?message=${encodeURIComponent(message)}&sessionId=${sessionId}&authorization=${encodeURIComponent(token || '')}`)
   let finished = false
   es.onmessage = (e) => {
@@ -27,6 +33,11 @@ export function chatStream(message, sessionId, { onToken, onItems, onDone, onErr
   es.onerror = () => {
     if (!finished) {
       es.close()
+      // EventSource 读不到 HTTP 状态码，用 token 是否失效来区分 401 和真断网
+      if (!isTokenFresh()) {
+        toLogin('/ai')
+        return
+      }
       onError && onError(new Error('连接中断'))
     }
   }

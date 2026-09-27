@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { toLogin } from '@/utils/auth'
 
 const request = axios.create({
   baseURL: '/api',
@@ -25,9 +26,8 @@ request.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      ElMessage.warning('请先登录')
-      localStorage.removeItem('zg_token')
-      window.location.href = '/login'
+      ElMessage.warning('登录已过期，请重新登录')
+      toLogin(window.location.pathname)
     } else {
       ElMessage.error(error.message || '网络异常')
     }
