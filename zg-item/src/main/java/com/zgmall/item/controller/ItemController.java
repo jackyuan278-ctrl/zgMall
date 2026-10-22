@@ -29,6 +29,12 @@ public class ItemController {
         return Result.success(itemService.queryItemPage(query));
     }
 
+
+    @GetMapping("/hot")
+    public Result<List<ItemVO>> queryHotItems() {
+        return Result.success(itemService.queryHotItems());
+    }
+
     /** 免鉴权（网关白名单） */
     @GetMapping("/{id}")
     public Result<ItemVO> queryItemById(@PathVariable("id") Long id) {

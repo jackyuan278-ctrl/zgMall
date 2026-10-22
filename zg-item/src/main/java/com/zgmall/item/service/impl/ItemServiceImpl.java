@@ -2,6 +2,7 @@ package com.zgmall.item.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -23,6 +24,8 @@ import com.zgmall.item.service.IItemService;
 
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,14 +35,18 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements IItemService {
     private final BrandMapper brandMapper;
     private final CategoryMapper categoryMapper;
+    private final StringRedisTemplate stringRedisTemplate;
+    private static final String HOT_ITEMS_KEY = "zg:item:hot:8";
     @Override
     public PageDTO<ItemVO> queryItemPage(ItemPageQuery query) {
         LambdaQueryWrapper<Item> lq = new QueryWrapper<Item>().lambda();
@@ -154,6 +161,51 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         }
 
         return pageDTO;
+    }
+
+    @Override
+    public List<ItemVO> queryHotItems() {
+        try {
+            String cached = stringRedisTemplate.opsForValue().get(HOT_ITEMS_KEY);
+            if (StrUtil.isNotBlank(cached)) {
+                return JSONUtil.toList(cached, ItemVO.class);
+            }
+        } catch (Exception e) {
+            log.warn("读取热卖商品缓存失败，回源数据库", e);
+        }
+
+        List<Item> items = lambdaQuery()
+                .eq(Item::getStatus, ItemStatus.ON_SHELF.getValue())
+                .orderByDesc(Item::getSales)
+                .orderByAsc(Item::getId)
+                .last("LIMIT 8")
+                .list();
+        List<ItemVO> hotItems = toItemVOList(items);
+        try {
+            stringRedisTemplate.opsForValue().set(HOT_ITEMS_KEY, JSONUtil.toJsonStr(hotItems), 5, TimeUnit.MINUTES);
+        } catch (Exception e) {
+            log.warn("写入热卖商品缓存失败", e);
+        }
+        return hotItems;
+    }
+
+    private List<ItemVO> toItemVOList(List<Item> items) {
+        List<Long> categoryIds = items.stream().map(Item::getCategoryId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<Long> brandIds = items.stream().map(Item::getBrandId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, Category> categoryMap = categoryIds.isEmpty() ? Collections.emptyMap()
+                : categoryMapper.selectBatchIds(categoryIds).stream().collect(Collectors.toMap(Category::getId, c -> c));
+        Map<Long, Brand> brandMap = brandIds.isEmpty() ? Collections.emptyMap()
+                : brandMapper.selectBatchIds(brandIds).stream().collect(Collectors.toMap(Brand::getId, b -> b));
+        List<ItemVO> result = new ArrayList<>();
+        for (Item item : items) {
+            ItemVO vo = BeanUtil.copyProperties(item, ItemVO.class);
+            Category category = categoryMap.get(item.getCategoryId());
+            Brand brand = brandMap.get(item.getBrandId());
+            if (category != null) vo.setCategoryName(category.getName());
+            if (brand != null) vo.setBrand(brand.getName());
+            result.add(vo);
+        }
+        return result;
     }
 
     @Override

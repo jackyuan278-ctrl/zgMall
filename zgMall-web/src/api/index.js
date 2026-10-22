@@ -29,6 +29,12 @@ export const itemApi = {
     if (USE_MOCK) return Promise.resolve(categories)
     return request.get('/items/categories')
   },
+  hot() {
+    if (USE_MOCK) {
+      return Promise.resolve([...items].filter((it) => it.status !== 2).sort((a, b) => b.sales - a.sales).slice(0, 8))
+    }
+    return request.get('/items/hot')
+  },
   page(params = {}) {
     if (USE_MOCK) {
       const { keyword = '', categoryId = null, page = 1, pageSize = 10, sort = '' } = params

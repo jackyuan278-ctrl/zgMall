@@ -13,6 +13,8 @@ public interface IItemService extends IService<Item> {
 
     PageDTO<ItemVO> queryItemPage(ItemPageQuery query);
 
+    List<ItemVO> queryHotItems();
+
     ItemVO queryItemById(Long id);
 
     /** 下单预扣库存（Feign 直连），条件更新防超卖 */

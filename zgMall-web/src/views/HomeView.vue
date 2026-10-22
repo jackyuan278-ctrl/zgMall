@@ -51,8 +51,7 @@ const hotItems = ref([])
 
 onMounted(async () => {
   categories.value = await itemApi.categories()
-  const { list } = await itemApi.page({ sort: 'sales', pageSize: 8 })
-  hotItems.value = list
+  hotItems.value = await itemApi.hot()
 })
 </script>
 
