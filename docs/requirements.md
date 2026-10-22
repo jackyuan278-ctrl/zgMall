@@ -275,21 +275,22 @@
 **用户故事**：作为用户，我想要支付订单，以便完成购买。
 
 **业务规则**
-- 前端契约：`POST /pay/orders/{orderId}/pay`。⚠️ 前端弹窗有"账户余额/模拟扫码"二选一，但 `orderApi.pay` **没把 payType 传给后端**（前端契约缺口，需补 body `{payType}` 或 query 参数）。
-- 支付单：`tb_pay_order` 以 `biz_order_no`（=订单 id）**唯一键**保证一笔订单只有一张支付单——**幂等**：重复支付请求查支付单，已支付直接返回成功；唯一键兜底并发。
+- 前端契约：`POST /pay/orders/{orderId}/pay`，请求体携带 `payType`（`balance` / `mock`）。
+- 支付单：`tb_pay_order` 以 `biz_order_no`（=订单 id）唯一键保证一单一支付单；状态 1待支付→3处理中→2已支付，Redis 锁用于并发削峰，数据库条件更新为最终并发闸门。余额扣款流水以订单号唯一约束确保重试幂等。
 - 支付方式分流：
-  - **余额**：校验 `tb_user.balance >= 金额` → 扣余额 → 改支付单/订单状态。⚠️ 余额在 user 库，pay 服务跨库扣款，**zg-api 需补 `UserClient`**（如 `PUT /users/{id}/balance/deduct`），目前不存在。
+  - **余额**：用户服务在本地事务中写扣款幂等流水并条件扣余额；Pay 通过 Feign 调用 User。
   - **模拟扫码**：直接置成功（demo 语义）。
-- 支付成功后发 MQ 消息（交换机 `pay.topic`，路由键 `pay.success` → 队列 `pay.notify.queue`），trade 服务监听后：订单 1→2、写 `pay_time`、触发销量累加（6.4）。
+- 支付成功后在 Pay 本地事务同时写 `tb_pay_event_outbox`；后台任务重试投递 MQ（交换机 `pay.topic`，路由键 `pay.success` → 队列 `pay.notify.queue`），Trade 幂等消费后将订单 1→2 并写 `pay_time`。投递为至少一次，消费者需幂等。
 - 订单状态流转闭环：下单(1) → 支付成功(2) → 发货(3)/完成(4)（3/4 一期无后台操作界面，可留接口或砍掉，状态码已预留）。
 
 **边界条件**
 - 订单不存在/已关闭（status=5）→ 拒绝支付。
-- 余额不足 → 拒绝并提示差额。
+- 余额不足 → 拒绝支付并保持支付单可重试。
+- Feign 调用超时造成扣款结果未知 → 支付单保持处理中；不能直接当作扣款失败。
 - 重复支付 → 幂等返回成功（不重复扣款）。
 - 金额以订单 `total_fee` 为准（服务端数据），不采信前端。
 
-**数据来源**：MySQL `tb_pay_order`；Feign 扣 user 余额；RabbitMQ `pay.success` 通知；MySQL `tb_order` 状态由 trade 更新。
+**数据来源**：MySQL `tb_pay_order` / `tb_pay_event_outbox`；Feign 扣 user 余额；RabbitMQ `pay.success` 通知；MySQL `tb_order` 状态由 trade 更新。退款补偿、库存恢复失败的持久重试暂不纳入 V2。
 
 ---
 

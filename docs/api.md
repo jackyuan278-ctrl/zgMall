@@ -46,7 +46,7 @@
 ### 1.4 分页结构（前端契约）
 
 ```json
-{ "list": [ ... ], "total": 128 }
+{ "list": [ "..." ], "total": 128 }
 ```
 
 - 请求参数：`page`（默认 1）、`pageSize`（默认 10）。
@@ -373,13 +373,13 @@
 |---|---|---|
 | POST | `/api/pay/orders/{orderId}/pay` | 是 |
 
-请求体：⚠️ 前端弹窗有"账户余额/模拟扫码"选择（`balance`/`mock`），但 `orderApi.pay` **当前没传支付方式**。需补 body：
+请求体：前端传入所选支付方式：
 
 ```json
 { "payType": "balance" }
 ```
 
-（`payType` 取值：`balance` 余额 / `mock` 模拟扫码；对应 `tb_order.payment_type` 1/2。**前端与后端需同步补上**。）
+（`payType` 取值：`balance` 余额 / `mock` 模拟扫码；对应 `tb_order.payment_type` 1/2。）
 
 响应：`{"code":200,"msg":"success","data":null}`。
 
@@ -387,7 +387,7 @@
 - 订单不存在/已关闭：`{"code":400,"msg":"订单不存在或已关闭","data":null}`
 - 余额不足：`{"code":400,"msg":"余额不足","data":null}`
 
-规则：以 `tb_pay_order.uk_biz_order_no` 唯一键 + 状态判断实现**幂等**（重复支付不重复扣款）；余额支付跨库扣 `tb_user.balance`，**zg-api 需补 `UserClient`**（见 4.2）；支付成功发 MQ `pay.success`（见 5）。**Service 待用户实现**。
+规则：以 `tb_pay_order.uk_biz_order_no` 唯一键、数据库状态条件更新和 Redis 锁实现防重；余额支付调用 User 服务本地事务扣款，扣款流水通过订单号唯一键幂等。Pay 在同一本地事务中标记支付成功并写入 `tb_pay_event_outbox`，后台任务重试发送 `pay.success`（见 5）。Trade 消费后幂等更新订单状态。支付超时后扣款结果未知时支付单保持处理中；退款补偿和库存恢复失败的持久重试暂不纳入 V2。
 
 ---
 

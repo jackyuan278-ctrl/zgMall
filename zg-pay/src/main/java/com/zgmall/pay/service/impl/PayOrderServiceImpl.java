@@ -3,7 +3,6 @@ package com.zgmall.pay.service.impl;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zgmall.api.client.TradeClient;
 import com.zgmall.api.client.UserClient;
-import com.zgmall.api.constants.MqConstants;
 import com.zgmall.api.dto.OrderDTO;
 import com.zgmall.common.BizException;
 import com.zgmall.common.Result;
@@ -15,7 +14,6 @@ import com.zgmall.pay.mapper.PayOrderMapper;
 import com.zgmall.pay.service.IPayOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -37,7 +35,7 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
 
     private final TradeClient tradeClient;
     private final UserClient userClient;
-    private final RabbitTemplate rabbitTemplate;
+    private final PayCompletionService payCompletionService;
     private final StringRedisTemplate stringRedisTemplate;
     private static final DefaultRedisScript<Long> UNLOCK_SCRIPT = PayLockScripts.UNLOCK;
 
@@ -159,20 +157,10 @@ public class PayOrderServiceImpl extends ServiceImpl<PayOrderMapper, PayOrder> i
             }
         }
 
-        // 只有确认扣款成功（或明确的模拟支付）后，才将 Pay 支付单置为已支付。
-        // Trade 订单不会在这里同步修改，而是通过下面的 MQ 通知由 trade 服务更新。
-        boolean paid = lambdaUpdate()
-                .eq(PayOrder::getId, payOrder.getId())
-                .eq(PayOrder::getStatus, PayStatus.PROCESSING)
-                .set(PayOrder::getStatus, PayStatus.PAID)
-                .set(PayOrder::getPayTime, LocalDateTime.now())
-                .update();
-        if (!paid) {
+        // 在本地事务中原子地标记已支付并写入 Outbox；通知由后台任务可靠重试。
+        if (!payCompletionService.markPaidAndCreateEvent(payOrder.getId(), orderId)) {
             throw new BizException(409, "支付结果待核对，请勿重复支付");
         }
-
-        // TODO 后续可用事务消息/Outbox 保证“支付成功”事件与本地状态一致。
-        rabbitTemplate.convertAndSend(MqConstants.PAY_NOTIFY_EXCHANGE, MqConstants.PAY_NOTIFY_KEY, orderId);
     }
 
     private void resetToUnpaid(Long payOrderId) {
