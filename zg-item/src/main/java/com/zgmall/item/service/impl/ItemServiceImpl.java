@@ -43,10 +43,40 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements IItemService {
+    private static final long MIN_VALID_CATEGORY_ID = 0L;
+    private static final long MIN_VALID_CURSOR_ID = 0L;
+    private static final int MIN_VALID_QUANTITY = 0;
+    private static final int MAX_OFFSET_PAGE = 5;
+    private static final long CURSOR_LOOKAHEAD = 1L;
+    private static final int LAST_RECORD_INDEX_OFFSET = 1;
+
+    private static final String DEFAULT_SORT = "";
+    private static final String SORT_SALES = "sales";
+    private static final String SORT_PRICE_ASC = "priceAsc";
+    private static final String SORT_PRICE_DESC = "priceDesc";
+
+    private static final int HOT_ITEM_LIMIT = 8;
+    private static final long HOT_CACHE_TTL_MINUTES = 5L;
+    private static final String HOT_ITEMS_KEY = "zg:item:hot:" + HOT_ITEM_LIMIT;
+
+    private static final String CATEGORY_INVALID_MESSAGE = "商品分类不合法";
+    private static final String PAGE_REQUIRES_CURSOR_MESSAGE = "第%d页起请使用游标分页";
+    private static final String CURSOR_INVALID_MESSAGE = "分页游标不合法";
+    private static final String CURSOR_PAGE_CONFLICT_MESSAGE = "游标分页不能同时指定页码";
+    private static final String UNSUPPORTED_SORT_MESSAGE = "不支持的商品排序方式";
+    private static final String DEFAULT_SORT_CURSOR_MESSAGE = "默认排序不需要排序游标值";
+    private static final String SORT_CURSOR_REQUIRED_MESSAGE = "当前排序缺少排序游标值";
+    private static final String ITEM_NOT_FOUND_MESSAGE = "商品不存在";
+    private static final String STOCK_NOT_ENOUGH_MESSAGE = "商品库存不足";
+    private static final String DETAILS_EMPTY_MESSAGE = "商品明细不能为空";
+    private static final String ITEM_DETAIL_INVALID_MESSAGE = "商品信息不完整";
+    private static final String QUANTITY_INVALID_MESSAGE = "商品数量必须大于0";
+    private static final String HOT_CACHE_READ_FAILED_MESSAGE = "读取热卖商品缓存失败，回源数据库";
+    private static final String HOT_CACHE_WRITE_FAILED_MESSAGE = "写入热卖商品缓存失败";
+
     private final BrandMapper brandMapper;
     private final CategoryMapper categoryMapper;
     private final StringRedisTemplate stringRedisTemplate;
-    private static final String HOT_ITEMS_KEY = "zg:item:hot:8";
     @Override
     public PageDTO<ItemVO> queryItemPage(ItemPageQuery query) {
         LambdaQueryWrapper<Item> lq = new QueryWrapper<Item>().lambda();
@@ -54,60 +84,61 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         if (StrUtil.isNotBlank(query.getKeyword())) {
             lq.like(Item::getName, query.getKeyword());
         }
-        if (query.getCategoryId() != null && query.getCategoryId() <= 0) {
-            throw new BizException(400, "商品分类不合法");
+        if (query.getCategoryId() != null && query.getCategoryId() <= MIN_VALID_CATEGORY_ID) {
+            throw new BizException(BizException.BAD_REQUEST_CODE, CATEGORY_INVALID_MESSAGE);
         }
         if (query.getCategoryId() != null) {
             lq.eq(Item::getCategoryId, query.getCategoryId());
         }
 
         boolean cursorMode = query.getCursorId() != null;
-        if (query.getPage() != null && query.getPage() > 5 && !cursorMode) {
-            throw new BizException(400, "第6页起请使用游标分页");
+        if (query.getPage() != null && query.getPage() > MAX_OFFSET_PAGE && !cursorMode) {
+            throw new BizException(BizException.BAD_REQUEST_CODE,
+                    String.format(PAGE_REQUIRES_CURSOR_MESSAGE, MAX_OFFSET_PAGE + CURSOR_LOOKAHEAD));
         }
-        if (cursorMode && query.getCursorId() <= 0) {
-            throw new BizException(400, "分页游标不合法");
+        if (cursorMode && query.getCursorId() <= MIN_VALID_CURSOR_ID) {
+            throw new BizException(BizException.BAD_REQUEST_CODE, CURSOR_INVALID_MESSAGE);
         }
-        if (cursorMode && query.getPage() != null && query.getPage() != 1) {
-            throw new BizException(400, "游标分页不能同时指定页码");
+        if (cursorMode && query.getPage() != null && query.getPage() != PageQuery.DEFAULT_PAGE) {
+            throw new BizException(BizException.BAD_REQUEST_CODE, CURSOR_PAGE_CONFLICT_MESSAGE);
         }
 
-        String sort = StrUtil.blankToDefault(query.getSort(), "");
+        String sort = StrUtil.blankToDefault(query.getSort(), DEFAULT_SORT);
         switch (sort) {
-            case "sales" :
+            case SORT_SALES:
                 lq.orderByDesc(Item::getSales).orderByAsc(Item::getId);
                 break;
-            case "priceAsc" :
+            case SORT_PRICE_ASC:
                 lq.orderByAsc(Item::getPrice).orderByAsc(Item::getId);
                 break;
-            case "priceDesc" :
+            case SORT_PRICE_DESC:
                 lq.orderByDesc(Item::getPrice).orderByAsc(Item::getId);
                 break;
-            case "" :
+            case DEFAULT_SORT:
                 lq.orderByAsc(Item::getId);
                 break;
             default:
-                throw new BizException(400, "不支持的商品排序方式");
+                throw new BizException(BizException.BAD_REQUEST_CODE, UNSUPPORTED_SORT_MESSAGE);
         }
 
         if (cursorMode) {
-            if (sort.isEmpty()) {
+            if (DEFAULT_SORT.equals(sort)) {
                 if (query.getCursorSortValue() != null) {
-                    throw new BizException(400, "默认排序不需要排序游标值");
+                    throw new BizException(BizException.BAD_REQUEST_CODE, DEFAULT_SORT_CURSOR_MESSAGE);
                 }
             } else if (query.getCursorSortValue() == null) {
-                throw new BizException(400, "当前排序缺少排序游标值");
+                throw new BizException(BizException.BAD_REQUEST_CODE, SORT_CURSOR_REQUIRED_MESSAGE);
             }
             switch (sort) {
-                case "sales":
+                case SORT_SALES:
                     lq.and(w -> w.lt(Item::getSales, query.getCursorSortValue())
                             .or().eq(Item::getSales, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
                     break;
-                case "priceAsc":
+                case SORT_PRICE_ASC:
                     lq.and(w -> w.gt(Item::getPrice, query.getCursorSortValue())
                             .or().eq(Item::getPrice, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
                     break;
-                case "priceDesc":
+                case SORT_PRICE_DESC:
                     lq.and(w -> w.lt(Item::getPrice, query.getCursorSortValue())
                             .or().eq(Item::getPrice, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
                     break;
@@ -117,12 +148,12 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         }
 
         Page<Item> page = cursorMode
-                ? new Page<>(1, normalizedPageSize(query.getPageSize()) + 1L, false)
+                ? new Page<>(PageQuery.DEFAULT_PAGE, normalizedPageSize(query.getPageSize()) + CURSOR_LOOKAHEAD, false)
                 : query.toMpPage();
         Page<Item> result = this.page(page, lq);
         boolean hasMore = cursorMode && result.getRecords().size() > normalizedPageSize(query.getPageSize());
         if (hasMore) {
-            result.getRecords().remove(result.getRecords().size() - 1);
+            result.getRecords().remove(result.getRecords().size() - LAST_RECORD_INDEX_OFFSET);
         }
 
         List<Long> categoryIds = result.getRecords().stream()
@@ -154,10 +185,10 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         pageDTO.setList(itemVoList);
         if (cursorMode) {
             pageDTO.setHasMore(hasMore);
-            Item lastItem = result.getRecords().isEmpty() ? null : result.getRecords().get(result.getRecords().size() - 1);
+            Item lastItem = result.getRecords().isEmpty() ? null : result.getRecords().get(result.getRecords().size() - LAST_RECORD_INDEX_OFFSET);
             pageDTO.setNextCursor(lastItem == null ? null : lastItem.getId());
-            pageDTO.setNextCursorSortValue(lastItem == null || sort.isEmpty() ? null
-                    : "sales".equals(sort) ? lastItem.getSales() : lastItem.getPrice());
+            pageDTO.setNextCursorSortValue(lastItem == null || DEFAULT_SORT.equals(sort) ? null
+                    : SORT_SALES.equals(sort) ? lastItem.getSales() : lastItem.getPrice());
         }
 
         return pageDTO;
@@ -171,20 +202,20 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
                 return JSONUtil.toList(cached, ItemVO.class);
             }
         } catch (Exception e) {
-            log.warn("读取热卖商品缓存失败，回源数据库", e);
+            log.warn(HOT_CACHE_READ_FAILED_MESSAGE, e);
         }
 
         List<Item> items = lambdaQuery()
                 .eq(Item::getStatus, ItemStatus.ON_SHELF.getValue())
                 .orderByDesc(Item::getSales)
                 .orderByAsc(Item::getId)
-                .last("LIMIT 8")
+                .last("LIMIT " + HOT_ITEM_LIMIT)
                 .list();
         List<ItemVO> hotItems = toItemVOList(items);
         try {
-            stringRedisTemplate.opsForValue().set(HOT_ITEMS_KEY, JSONUtil.toJsonStr(hotItems), 5, TimeUnit.MINUTES);
+            stringRedisTemplate.opsForValue().set(HOT_ITEMS_KEY, JSONUtil.toJsonStr(hotItems), HOT_CACHE_TTL_MINUTES, TimeUnit.MINUTES);
         } catch (Exception e) {
-            log.warn("写入热卖商品缓存失败", e);
+            log.warn(HOT_CACHE_WRITE_FAILED_MESSAGE, e);
         }
         return hotItems;
     }
@@ -212,7 +243,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
     public ItemVO queryItemById(Long id) {
         Item item = getById(id);
         if (item == null) {
-            throw new BizException(400,"商品不存在");
+            throw new BizException(BizException.BAD_REQUEST_CODE, ITEM_NOT_FOUND_MESSAGE);
         }
         ItemVO itemVO = BeanUtil.copyProperties(item, ItemVO.class);
         Long categoryId = item.getCategoryId();
@@ -240,9 +271,9 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
             if (!update) {
                 Item item = getById(itemId);
                 if (item != null) {
-                    throw new BizException(400,"商品库存不足");
+                    throw new BizException(BizException.BAD_REQUEST_CODE, STOCK_NOT_ENOUGH_MESSAGE);
                 }else{
-                    throw new BizException(400,"商品不存在");
+                    throw new BizException(BizException.BAD_REQUEST_CODE, ITEM_NOT_FOUND_MESSAGE);
                 }
 
             }
@@ -258,7 +289,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
             Long itemId = detail.getItemId();
             Item item = getById(itemId);
             if (item == null) {
-                throw new BizException(400,"商品不存在" );
+                throw new BizException(BizException.BAD_REQUEST_CODE, ITEM_NOT_FOUND_MESSAGE);
             }
             lambdaUpdate().eq(Item::getId, itemId).setIncrBy(Item::getStock,num).update();
 
@@ -267,21 +298,21 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
 
     private void validateStockDetails(List<OrderDetailDTO> details) {
         if (details == null || details.isEmpty()) {
-            throw new BizException(400, "商品明细不能为空");
+            throw new BizException(BizException.BAD_REQUEST_CODE, DETAILS_EMPTY_MESSAGE);
         }
         for (OrderDetailDTO detail : details) {
             if (detail == null || detail.getItemId() == null) {
-                throw new BizException(400, "商品信息不完整");
+                throw new BizException(BizException.BAD_REQUEST_CODE, ITEM_DETAIL_INVALID_MESSAGE);
             }
-            if (detail.getNum() == null || detail.getNum() <= 0) {
-                throw new BizException(400, "商品数量必须大于0");
+            if (detail.getNum() == null || detail.getNum() <= MIN_VALID_QUANTITY) {
+                throw new BizException(BizException.BAD_REQUEST_CODE, QUANTITY_INVALID_MESSAGE);
             }
         }
     }
 
 
     private long normalizedPageSize(Integer pageSize) {
-        if (pageSize == null || pageSize < 1) {
+        if (pageSize == null || pageSize < PageQuery.MIN_PAGE_SIZE) {
             return PageQuery.DEFAULT_PAGE_SIZE;
         }
         return Math.min(pageSize, PageQuery.MAX_PAGE_SIZE);

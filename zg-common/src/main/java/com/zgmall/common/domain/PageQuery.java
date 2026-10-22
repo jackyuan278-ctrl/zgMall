@@ -9,7 +9,9 @@ import lombok.Data;
 @Data
 public class PageQuery {
 
-    public static final int DEFAULT_PAGE = 1;
+    public static final int MIN_PAGE_NUMBER = 1;
+    public static final int MIN_PAGE_SIZE = 1;
+    public static final int DEFAULT_PAGE = MIN_PAGE_NUMBER;
     public static final int DEFAULT_PAGE_SIZE = 10;
     public static final int MAX_PAGE_SIZE = 50;
 
@@ -17,8 +19,9 @@ public class PageQuery {
     private Integer pageSize = DEFAULT_PAGE_SIZE;
 
     public <T> Page<T> toMpPage() {
-        int pageNo = page == null || page < 1 ? DEFAULT_PAGE : page;
-        int size = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
+        int pageNo = page == null || page < MIN_PAGE_NUMBER ? DEFAULT_PAGE : page;
+        int size = pageSize == null || pageSize < MIN_PAGE_SIZE
+                ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         return new Page<>(pageNo, size);
     }
 }

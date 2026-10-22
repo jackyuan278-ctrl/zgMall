@@ -9,6 +9,8 @@ public enum ItemStatus {
     OFF_SHELF(0, "下架"),
     ON_SHELF(1, "上架");
 
+    private static final String INVALID_STATUS_MESSAGE = "非法的商品状态: ";
+
     private final int value;
     private final String desc;
 
@@ -26,6 +28,6 @@ public enum ItemStatus {
                 return status;
             }
         }
-        throw new BizException(400, "非法的商品状态: " + value);
+        throw new BizException(BizException.BAD_REQUEST_CODE, INVALID_STATUS_MESSAGE + value);
     }
 }
