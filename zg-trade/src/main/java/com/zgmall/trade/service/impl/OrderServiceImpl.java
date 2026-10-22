@@ -64,9 +64,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             if (data==null){
                 throw new BizException(400,"商品不存在");
             }
+            if (good == null || good.getItemId() == null) {
+                throw new BizException(400, "商品信息不完整");
+            }
             Integer num = good.getNum();
-            if (num == null) {
-                throw new BizException(400,"商品数据不能为空");
+            if (num == null || num <= 0) {
+                throw new BizException(400, "商品数量必须大于0");
             }
             OrderDetailDTO  orderDetailDTO = new OrderDetailDTO();
             orderDetailDTO.setItemId(good.getItemId());

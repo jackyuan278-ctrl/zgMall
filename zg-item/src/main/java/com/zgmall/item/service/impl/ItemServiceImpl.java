@@ -118,6 +118,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
     @Override
     @Transactional(rollbackFor = BizException.class)
     public void deductStock(List<OrderDetailDTO> details) {
+        validateStockDetails(details);
         details.sort(Comparator.comparing(OrderDetailDTO::getItemId));
         for (OrderDetailDTO detail : details) {
             Integer num = detail.getNum();
@@ -138,6 +139,7 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
     @Override
     @Transactional(rollbackFor = BizException.class)
     public void restoreStock(List<OrderDetailDTO> details) {
+        validateStockDetails(details);
         for (OrderDetailDTO detail : details) {
             Integer num = detail.getNum();
             Long itemId = detail.getItemId();
@@ -149,4 +151,19 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
 
         }
     }
+
+    private void validateStockDetails(List<OrderDetailDTO> details) {
+        if (details == null || details.isEmpty()) {
+            throw new BizException(400, "商品明细不能为空");
+        }
+        for (OrderDetailDTO detail : details) {
+            if (detail == null || detail.getItemId() == null) {
+                throw new BizException(400, "商品信息不完整");
+            }
+            if (detail.getNum() == null || detail.getNum() <= 0) {
+                throw new BizException(400, "商品数量必须大于0");
+            }
+        }
+    }
+
 }

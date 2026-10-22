@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import lombok.Data;
 
 import java.util.List;
@@ -27,5 +28,5 @@ public class OrderFormDTO {
     private String remark;
 
     @NotEmpty(message = "下单商品不能为空")
-    private List<@NotNull(message = "商品明细不能为空") OrderGoodsDTO> goods;
+    private List<@NotNull(message = "商品明细不能为空") @Valid OrderGoodsDTO> goods;
 }
