@@ -47,22 +47,76 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
         if (StrUtil.isNotBlank(query.getKeyword())) {
             lq.like(Item::getName, query.getKeyword());
         }
+        if (query.getCategoryId() != null && query.getCategoryId() <= 0) {
+            throw new BizException(400, "商品分类不合法");
+        }
         if (query.getCategoryId() != null) {
             lq.eq(Item::getCategoryId, query.getCategoryId());
         }
 
-        if (StrUtil.isNotBlank(query.getSort())) {
-            switch (query.getSort()) {
-                case "sales" : lq.orderByDesc(Item::getSales); break;
-                case "priceAsc" : lq.orderByAsc(Item::getPrice); break;
-                case "priceDesc" : lq.orderByDesc(Item::getPrice); break;
-                default:  break;
-            }
-        } else {
-            // 无排序时按主键稳定翻页：MySQL 无 ORDER BY 的 LIMIT 顺序不保证，AI 入库逐页拉取会漏商品
-            lq.orderByAsc(Item::getId);
+        boolean cursorMode = query.getCursorId() != null;
+        if (query.getPage() != null && query.getPage() > 5 && !cursorMode) {
+            throw new BizException(400, "第6页起请使用游标分页");
         }
-        Page<Item> result = this.page(query.toMpPage(), lq);
+        if (cursorMode && query.getCursorId() <= 0) {
+            throw new BizException(400, "分页游标不合法");
+        }
+        if (cursorMode && query.getPage() != null && query.getPage() != 1) {
+            throw new BizException(400, "游标分页不能同时指定页码");
+        }
+
+        String sort = StrUtil.blankToDefault(query.getSort(), "");
+        switch (sort) {
+            case "sales" :
+                lq.orderByDesc(Item::getSales).orderByAsc(Item::getId);
+                break;
+            case "priceAsc" :
+                lq.orderByAsc(Item::getPrice).orderByAsc(Item::getId);
+                break;
+            case "priceDesc" :
+                lq.orderByDesc(Item::getPrice).orderByAsc(Item::getId);
+                break;
+            case "" :
+                lq.orderByAsc(Item::getId);
+                break;
+            default:
+                throw new BizException(400, "不支持的商品排序方式");
+        }
+
+        if (cursorMode) {
+            if (sort.isEmpty()) {
+                if (query.getCursorSortValue() != null) {
+                    throw new BizException(400, "默认排序不需要排序游标值");
+                }
+            } else if (query.getCursorSortValue() == null) {
+                throw new BizException(400, "当前排序缺少排序游标值");
+            }
+            switch (sort) {
+                case "sales":
+                    lq.and(w -> w.lt(Item::getSales, query.getCursorSortValue())
+                            .or().eq(Item::getSales, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
+                    break;
+                case "priceAsc":
+                    lq.and(w -> w.gt(Item::getPrice, query.getCursorSortValue())
+                            .or().eq(Item::getPrice, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
+                    break;
+                case "priceDesc":
+                    lq.and(w -> w.lt(Item::getPrice, query.getCursorSortValue())
+                            .or().eq(Item::getPrice, query.getCursorSortValue()).gt(Item::getId, query.getCursorId()));
+                    break;
+                default:
+                    lq.gt(Item::getId, query.getCursorId());
+            }
+        }
+
+        Page<Item> page = cursorMode
+                ? new Page<>(1, normalizedPageSize(query.getPageSize()) + 1L, false)
+                : query.toMpPage();
+        Page<Item> result = this.page(page, lq);
+        boolean hasMore = cursorMode && result.getRecords().size() > normalizedPageSize(query.getPageSize());
+        if (hasMore) {
+            result.getRecords().remove(result.getRecords().size() - 1);
+        }
 
         List<Long> categoryIds = result.getRecords().stream()
                 .map(Item::getCategoryId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
@@ -89,8 +143,15 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
             itemVoList.add(itemVO);
         }
         PageDTO<ItemVO> pageDTO = new PageDTO<>();
-        pageDTO.setTotal(result.getTotal());
+        pageDTO.setTotal(cursorMode ? null : result.getTotal());
         pageDTO.setList(itemVoList);
+        if (cursorMode) {
+            pageDTO.setHasMore(hasMore);
+            Item lastItem = result.getRecords().isEmpty() ? null : result.getRecords().get(result.getRecords().size() - 1);
+            pageDTO.setNextCursor(lastItem == null ? null : lastItem.getId());
+            pageDTO.setNextCursorSortValue(lastItem == null || sort.isEmpty() ? null
+                    : "sales".equals(sort) ? lastItem.getSales() : lastItem.getPrice());
+        }
 
         return pageDTO;
     }
@@ -164,6 +225,14 @@ public class ItemServiceImpl extends ServiceImpl<ItemMapper, Item> implements II
                 throw new BizException(400, "商品数量必须大于0");
             }
         }
+    }
+
+
+    private long normalizedPageSize(Integer pageSize) {
+        if (pageSize == null || pageSize < 1) {
+            return PageQuery.DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(pageSize, PageQuery.MAX_PAGE_SIZE);
     }
 
 }

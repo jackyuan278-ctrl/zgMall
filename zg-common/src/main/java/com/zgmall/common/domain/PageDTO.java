@@ -19,20 +19,35 @@ import java.util.stream.Collectors;
 public class PageDTO<T> {
 
     private Long total;
+    private Long nextCursor;
+    private Integer nextCursorSortValue;
+    private Boolean hasMore;
     private List<T> list;
 
     public static <T> PageDTO<T> of(Page<T> page) {
         if (page == null || page.getRecords() == null) {
-            return new PageDTO<>(page == null ? 0L : page.getTotal(), new ArrayList<>());
+            PageDTO<T> result = new PageDTO<>();
+            result.setTotal(page == null ? 0L : page.getTotal());
+            result.setList(new ArrayList<>());
+            return result;
         }
-        return new PageDTO<>(page.getTotal(), page.getRecords());
+        PageDTO<T> result = new PageDTO<>();
+        result.setTotal(page.getTotal());
+        result.setList(page.getRecords());
+        return result;
     }
 
     public static <T, R> PageDTO<T> of(Page<R> page, Function<R, T> converter) {
         if (page == null || page.getRecords() == null) {
-            return new PageDTO<>(page == null ? 0L : page.getTotal(), new ArrayList<>());
+            PageDTO<T> result = new PageDTO<>();
+            result.setTotal(page == null ? 0L : page.getTotal());
+            result.setList(new ArrayList<>());
+            return result;
         }
         List<T> list = page.getRecords().stream().map(converter).collect(Collectors.toList());
-        return new PageDTO<>(page.getTotal(), list);
+        PageDTO<T> result = new PageDTO<>();
+        result.setTotal(page.getTotal());
+        result.setList(list);
+        return result;
     }
 }
