@@ -42,8 +42,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OrderVO createOrder(OrderFormDTO orderFormDTO) {
-        // TODO 核心业务待用户实现（面试重头戏）：
-        //      1. userId 取 UserContextq
         Long userId = UserContext.getUser();
         if (userId == null) {
             throw new BizException(400,"请先登录");
@@ -160,7 +158,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public OrderVO queryOrderById(Long id) {
-        // TODO 核心业务待用户实现：查订单 + 明细，校验归属当前用户（防越权）
         Long userId = UserContext.getUser();
         if (userId == null) {
             throw new BizException(400,"请先登录");
@@ -186,6 +183,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public void markPaySuccess(Long orderId) {
+        // Pay 已将支付单确认成功后才发送消息；Trade 只负责幂等地更新自己的订单状态。
         // TODO 销量累加待拍板（建议 item 服务监听支付成功消息异步加 sold）
         boolean success = lambdaUpdate()
                 .eq(Order::getId, orderId)

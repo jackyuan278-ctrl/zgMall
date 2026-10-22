@@ -9,9 +9,15 @@ import com.zgmall.user.domain.dto.LoginFormDTO;
 import com.zgmall.user.domain.dto.RegisterFormDTO;
 import com.zgmall.user.domain.dto.UpdateUserDTO;
 import com.zgmall.user.domain.po.User;
+import com.zgmall.user.domain.po.BalanceDeduction;
 import com.zgmall.user.domain.vo.UserLoginVO;
 import com.zgmall.user.domain.vo.UserVO;
 import com.zgmall.user.mapper.UserMapper;
+import com.zgmall.user.mapper.BalanceDeductionMapper;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 import com.zgmall.user.service.IUserService;
 import com.zgmall.user.enums.UserStatus;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +33,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
     // 容器 Bean：passWordConfig 里 @Bean 注册，@RequiredArgsConstructor 自动注入
     private final PasswordEncoder passwordEncoder;
+
+    private final BalanceDeductionMapper balanceDeductionMapper;
 
     @Override
     public void register(RegisterFormDTO registerFormDTO) {
@@ -126,21 +134,40 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     }
 
     @Override
-    public void deductBalance(Long userId, Integer amount) {
-        User user = query().eq("id", userId).one();
-        if (user == null) {
-            throw new BizException("用户不存在");
+    @Transactional(rollbackFor = Exception.class)
+    public void deductBalance(Long userId, Long bizOrderNo, Integer amount) {
+        if (userId == null || bizOrderNo == null) {
+            throw new BizException("用户或订单信息不能为空");
         }
-        if(amount == null || amount <= 0){
-            throw new BizException("传入价格有误");
+        if (amount == null || amount <= 0) {
+            throw new BizException("扣款金额必须大于0");
         }
+
+        // 先尝试写入唯一业务订单流水。若订单号已存在，说明可能是网络超时后的安全重试。
+        BalanceDeduction deduction = new BalanceDeduction();
+        deduction.setBizOrderNo(bizOrderNo);
+        deduction.setUserId(userId);
+        deduction.setAmount(amount);
+        deduction.setCreateTime(LocalDateTime.now());
+        try {
+            balanceDeductionMapper.insert(deduction);
+        } catch (DuplicateKeyException duplicate) {
+            // 唯一键在数据库层串行化并发请求；重复请求只在用户、金额一致时按成功幂等返回。
+            BalanceDeduction existing = balanceDeductionMapper.selectByBizOrderNoForUpdate(bizOrderNo);
+            if (existing != null && userId.equals(existing.getUserId()) && amount.equals(existing.getAmount())) {
+                return;
+            }
+            throw new BizException("订单扣款幂等信息不匹配");
+        }
+
+        // 流水插入与余额条件扣减处于同一个本地事务：余额不足时抛错会同时回滚流水。
         boolean deducted = lambdaUpdate()
                 .eq(User::getId, userId)
                 .ge(User::getBalance, amount)
                 .setDecrBy(User::getBalance, amount)
                 .update();
         if (!deducted) {
-            throw new BizException("余额不足");
+            throw new BizException("用户不存在或余额不足");
         }
     }
 }

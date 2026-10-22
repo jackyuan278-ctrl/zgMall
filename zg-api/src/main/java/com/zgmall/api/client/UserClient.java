@@ -13,5 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 public interface UserClient {
 
     @PutMapping("/{id}/balance/deduct")
-    Result<Void> deductBalance(@PathVariable("id") Long userId, @RequestParam("amount") Integer amount);
+    Result<Void> deductBalance(@PathVariable("id") Long userId,
+                               @RequestParam("orderId") Long orderId,
+                               @RequestParam("amount") Integer amount);
 }

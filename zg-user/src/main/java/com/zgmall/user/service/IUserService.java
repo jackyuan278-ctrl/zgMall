@@ -21,6 +21,6 @@ public interface IUserService extends IService<User> {
 
     void updateMe(UpdateUserDTO updateUserDTO);
 
-    /** 支付服务扣减余额（Feign 直连） */
-    void deductBalance(Long userId, Integer amount);
+    /** 支付服务扣减余额；bizOrderNo 是幂等键，同一订单只能扣款一次。 */
+    void deductBalance(Long userId, Long bizOrderNo, Integer amount);
 }

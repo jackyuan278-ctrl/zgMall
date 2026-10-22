@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS tb_pay_order (
     biz_order_no  BIGINT   NOT NULL COMMENT '业务订单号（trade服务的订单id）',
     pay_user_id   BIGINT   NOT NULL COMMENT '支付用户id',
     amount        INT      NOT NULL COMMENT '支付金额（分）',
-    status        TINYINT  NOT NULL DEFAULT 1 COMMENT '状态：1未支付 2已支付',
+    status        TINYINT  NOT NULL DEFAULT 1 COMMENT '状态：1待支付 2已支付 3处理中',
     create_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     pay_time      DATETIME NULL COMMENT '支付时间',
     update_time   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

@@ -29,7 +29,7 @@ public class PayOrder implements Serializable {
     /** 支付金额（分） */
     private Integer amount;
 
-    /** 1未支付 2已支付 */
+    /** 支付状态：1待支付、2已支付、3处理中。处理中用于阻止并发支付请求重复扣款。 */
     private Integer status;
 
     private LocalDateTime createTime;

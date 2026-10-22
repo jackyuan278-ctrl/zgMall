@@ -58,8 +58,10 @@ public class UserController {
 
     /** 内部接口：支付服务扣减余额（Feign 直连 user-service，不经网关） */
     @PutMapping("/{id}/balance/deduct")
-    public Result<Void> deductBalance(@PathVariable("id") Long userId, @RequestParam("amount") Integer amount) {
-        userService.deductBalance(userId, amount);
+    public Result<Void> deductBalance(@PathVariable("id") Long userId,
+                                      @RequestParam("orderId") Long orderId,
+                                      @RequestParam("amount") Integer amount) {
+        userService.deductBalance(userId, orderId, amount);
         return Result.success();
     }
 }
