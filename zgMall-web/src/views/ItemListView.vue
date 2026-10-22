@@ -135,7 +135,7 @@ function reload() {
 }
 
 watch(() => route.query, (query) => {
-  categoryId.value = query.categoryId ? Number(query.categoryId) : null
+  categoryId.value = query.categoryId ? String(query.categoryId) : null
   reload()
 })
 

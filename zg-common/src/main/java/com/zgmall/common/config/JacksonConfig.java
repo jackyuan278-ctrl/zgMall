@@ -1,5 +1,6 @@
 package com.zgmall.common.config;
 
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.LocalDateTimeSerializer;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
@@ -18,6 +19,8 @@ public class JacksonConfig {
     public Jackson2ObjectMapperBuilderCustomizer localDateTimeCustomizer() {
         return builder -> builder
                 .serializers(new LocalDateTimeSerializer(FORMATTER))
+                .serializerByType(Long.class, ToStringSerializer.instance)
+                .serializerByType(Long.TYPE, ToStringSerializer.instance)
                 .deserializers(new LocalDateTimeDeserializer(FORMATTER));
     }
 }

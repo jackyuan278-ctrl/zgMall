@@ -87,7 +87,7 @@ async function doPay() {
 onMounted(async () => {
   await load()
   if (route.query.pay) {
-    const order = orders.value.find((o) => o.id === Number(route.query.pay))
+    const order = orders.value.find((o) => String(o.id) === String(route.query.pay))
     if (order && order.status === 1) openPay(order)
   }
 })
